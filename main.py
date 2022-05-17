@@ -88,6 +88,35 @@ def get_bone_mapper(bone_contour):
     return bone_mapper
 
 
+def get_bone_data_filtered(bone_contour, skin_contour):
+    bone_reader, range = get_distance_filter(bone_contour, skin_contour)
+    distance = bone_reader.GetOutputPort(0)
+
+    exclusion = vtk.vtkDoubleArray()
+    exclusion.SetNumberOfComponents(2)
+    exclusion.SetNumberOfTuples(1)
+    exclusion.FillComponent(0, 2.4)
+    exclusion.FillComponent(1, float("inf"))
+
+    selection_params = vtk.vtkSelectionNode()
+    selection_params.SetContentType(selection_params.THRESHOLDS)
+    selection_params.SetFieldType(selection_params.CELL)
+    selection_params.SetSelectionList(exclusion)
+
+    selector = vtk.vtkSelection()
+    selector.SetNode("cells", selection_params)
+
+    selection = vtk.vtkExtractSelection()
+    selection.SetInputConnection(0, distance)
+    selection.SetInputData(1, selector)
+
+    # Getting polydata back
+    converter = vtk.vtkGeometryFilter()
+    converter.SetInputConnection(selection.GetOutputPort())
+    converter.Update()
+    return converter, range
+
+
 def upper_left(bone_contour, skin_contour):
     plane = vtk.vtkPlane()
     plane.SetNormal(0, 0, 1)
@@ -178,34 +207,9 @@ def lower_left(bone_contour, skin_contour):
 
 
 def lower_right(bone_contour, skin_contour):
-    bone_reader, range = get_distance_filter(bone_contour, skin_contour)
-    distance = bone_reader.GetOutputPort(0)
-
-    exclusion = vtk.vtkDoubleArray()
-    exclusion.SetNumberOfComponents(2)
-    exclusion.SetNumberOfTuples(1)
-    exclusion.FillComponent(0, 2.4)
-    exclusion.FillComponent(1, float("inf"))
-
-    selection_params = vtk.vtkSelectionNode()
-    selection_params.SetContentType(selection_params.THRESHOLDS)
-    selection_params.SetFieldType(selection_params.CELL)
-    selection_params.SetSelectionList(exclusion)
-
-    selector = vtk.vtkSelection()
-    selector.SetNode("cells", selection_params)
-
-    selection = vtk.vtkExtractSelection()
-    selection.SetInputConnection(0, distance)
-    selection.SetInputData(1, selector)
-
-    #Getting polydata back
-    converter = vtk.vtkGeometryFilter()
-    converter.SetInputConnection(selection.GetOutputPort())
-    converter.Update()
-
+    bone_data, range  = get_bone_data_filtered(bone_contour, skin_contour)
     distance_mapper = vtk.vtkPolyDataMapper()
-    distance_mapper.SetInputConnection(converter.GetOutputPort())
+    distance_mapper.SetInputConnection(bone_data.GetOutputPort())
     distance_mapper.SetScalarRange(
         range[0],
         range[1],
