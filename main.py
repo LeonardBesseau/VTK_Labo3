@@ -1,5 +1,4 @@
 import os.path
-
 import vtkmodules.all as vtk
 
 INPUT_FILE = "files/vw_knee.slc"
@@ -169,7 +168,7 @@ def upper_right(bone_contour, skin_contour):
     setup_skin_properties(michel_skin)
 
     # TODO add box (Maybe at a global level to avoid duplication)
-    return renderer
+    return create_renderer([michel_skin, michel_bone], colors.GetColor3d('PaleGreen'))
 
 
 def lower_left(bone_contour, skin_contour):
@@ -203,7 +202,7 @@ def lower_left(bone_contour, skin_contour):
     setup_skin_properties(michel_skin)
 
     # TODO add box (Maybe at a global level to avoid duplication)
-    return renderer
+    return create_renderer([michel_skin, michel_bone], colors.GetColor3d('LightCyan'))
 
 
 def lower_right(bone_contour, skin_contour):
