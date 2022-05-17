@@ -1,15 +1,91 @@
+import os.path
+
 import vtkmodules.all as vtk
 
-input_file = "files/vw_knee.slc"
+INPUT_FILE = "files/vw_knee.slc"
+BONE_FILE = "spooky_skeleton.vtk"
+BONE_FILE_RANGE = "spooky_skeleton.range"
 
 
 def get_body_part_contour(reader, value):
     filter = vtk.vtkContourFilter()
     filter.SetInputConnection(reader.GetOutputPort())
-    # Change the range(2nd and 3rd Paramater) based on your
-    # requirement. recomended value for 1st parameter is above 1
     filter.SetValue(0, value)
     return filter
+
+
+def create_renderer(actors, color):
+    renderer = vtk.vtkRenderer()
+    for actor in actors:
+        renderer.AddActor(actor)
+    renderer.SetBackground(color)
+    # TODO add box (Maybe at a global level to avoid duplication)
+    return renderer
+
+
+def get_bone_actor(bone_contour):
+    bone_mapper = vtk.vtkPolyDataMapper()
+    bone_mapper.SetInputConnection(bone_contour.GetOutputPort())
+    bone_mapper.ScalarVisibilityOff()
+
+
+    bone_actor = vtk.vtkActor()
+    bone_actor.SetMapper(bone_mapper)
+    bone_actor.GetProperty().SetDiffuse(0.8)
+    bone_actor.GetProperty().SetDiffuseColor(colors.GetColor3d('Ivory'))
+    bone_actor.GetProperty().SetSpecular(0.8)
+    bone_actor.GetProperty().SetSpecularPower(120.0)
+
+    return bone_actor
+
+
+def setup_skin_properties(skin):
+    skin.GetProperty().SetDiffuse(0.8)
+    skin.GetProperty().SetDiffuseColor(colors.GetColor3d('LightCoral'))
+    skin.GetProperty().SetSpecular(0.1)
+    skin.GetProperty().SetSpecularPower(120.0)
+
+
+def get_distance_filter(bone_contour, skin_contour):
+    if os.path.isfile(BONE_FILE):
+        bone_reader = vtk.vtkPolyDataReader()
+        bone_reader.SetFileName(BONE_FILE)
+        bone_reader.ReadAllScalarsOn()
+        with open(BONE_FILE_RANGE, "r") as file_range:
+            exclusion = file_range.readline().split(" ")
+            range = (float(exclusion[0]), float(exclusion[1]))
+        return bone_reader, range
+    else:
+        distance_filter = vtk.vtkDistancePolyDataFilter()
+        distance_filter.SetInputConnection(0, bone_contour.GetOutputPort())
+        distance_filter.SetInputConnection(1, skin_contour.GetOutputPort())
+        distance_filter.SignedDistanceOff()
+        distance_filter.Update()
+
+        print("Writing")
+        writer = vtk.vtkPolyDataWriter()
+        writer.SetFileName(BONE_FILE)
+        writer.SetFileTypeToBinary()
+        writer.SetInputData(distance_filter.GetOutput(0))
+        writer.Write()
+        with open(BONE_FILE_RANGE, "w") as file_range:
+            file_range.write(
+                str(distance_filter.GetOutput().GetPointData().GetScalars().GetRange()[0]) +
+                " " +
+                str(distance_filter.GetOutput().GetPointData().GetScalars().GetRange()[1])
+            )
+
+        print("Done writing")
+        range = (distance_filter.GetOutput().GetPointData().GetScalars().GetRange()[0],
+                 distance_filter.GetOutput().GetPointData().GetScalars().GetRange()[1])
+        return distance_filter, range
+
+
+def get_bone_mapper(bone_contour):
+    bone_mapper = vtk.vtkPolyDataMapper()
+    bone_mapper.SetInputConnection(bone_contour.GetOutputPort())
+    bone_mapper.ScalarVisibilityOff()
+    return bone_mapper
 
 
 def upper_left(bone_contour, skin_contour):
@@ -17,39 +93,29 @@ def upper_left(bone_contour, skin_contour):
     plane.SetNormal(0, 0, 1)
     plane.SetOrigin(0, 0, 0)
     cutter = vtk.vtkCutter()
+
     cutter.SetInputConnection(skin_contour.GetOutputPort())
     cutter.SetCutFunction(plane)
     cutter.GenerateValues(25, 0, 300)
 
-    boneMapper = vtk.vtkPolyDataMapper()
-    boneMapper.SetInputConnection(bone_contour.GetOutputPort())
-    boneMapper.ScalarVisibilityOff()
+    stripper = vtk.vtkStripper()
+    stripper.SetInputConnection(cutter.GetOutputPort())
 
-    # Skin
-    skinMapper = vtk.vtkPolyDataMapper()
-    skinMapper.SetInputConnection(cutter.GetOutputPort())
-    skinMapper.ScalarVisibilityOff()
+    tube = vtk.vtkTubeFilter()
+    tube.SetInputConnection(stripper.GetOutputPort())
+    tube.SetRadius(1)
 
-    michelBone = vtk.vtkActor()
-    michelBone.SetMapper(boneMapper)
-    michelBone.GetProperty().SetDiffuse(0.8)
-    michelBone.GetProperty().SetDiffuseColor(colors.GetColor3d('Ivory'))
-    michelBone.GetProperty().SetSpecular(0.8)
-    michelBone.GetProperty().SetSpecularPower(120.0)
+    michel_bone = get_bone_actor(bone_contour)
 
-    michelSkin = vtk.vtkActor()
-    michelSkin.SetMapper(skinMapper)
-    michelSkin.GetProperty().SetDiffuse(0.8)
-    michelSkin.GetProperty().SetDiffuseColor(colors.GetColor3d('LightCoral'))
-    michelSkin.GetProperty().SetSpecular(0.1)
-    michelSkin.GetProperty().SetSpecularPower(120.0)
+    skin_mapper = vtk.vtkPolyDataMapper()
+    skin_mapper.SetInputConnection(tube.GetOutputPort())
+    skin_mapper.ScalarVisibilityOff()
 
-    renderer = vtk.vtkRenderer()
-    renderer.AddActor(michelBone)
-    renderer.AddActor(michelSkin)
-    renderer.SetBackground(colors.GetColor3d('LightPink'))
-    # TODO add box (Maybe at a global level to avoid duplication)
-    return renderer
+    michel_skin = vtk.vtkActor()
+    michel_skin.SetMapper(skin_mapper)
+    setup_skin_properties(michel_skin)
+
+    return create_renderer([michel_skin, michel_bone], colors.GetColor3d('LightPink'))
 
 
 def upper_right(bone_contour, skin_contour):
@@ -60,38 +126,22 @@ def upper_right(bone_contour, skin_contour):
     clipper.SetInputConnection(skin_contour.GetOutputPort())
     clipper.SetClipFunction(sphere)
 
-    boneMapper = vtk.vtkPolyDataMapper()
-    boneMapper.SetInputConnection(bone_contour.GetOutputPort())
-    boneMapper.ScalarVisibilityOff()
+    michel_bone = get_bone_actor(bone_contour)
 
-    # Skin
-    skinMapper = vtk.vtkPolyDataMapper()
-    skinMapper.SetInputConnection(clipper.GetOutputPort())
-    skinMapper.ScalarVisibilityOff()
+    skin_mapper = vtk.vtkPolyDataMapper()
+    skin_mapper.SetInputConnection(clipper.GetOutputPort())
+    skin_mapper.ScalarVisibilityOff()
 
-    michelBone = vtk.vtkActor()
-    michelBone.SetMapper(boneMapper)
-    michelBone.GetProperty().SetDiffuse(0.8)
-    michelBone.GetProperty().SetDiffuseColor(colors.GetColor3d('Ivory'))
-    michelBone.GetProperty().SetSpecular(0.8)
-    michelBone.GetProperty().SetSpecularPower(120.0)
+    michel_skin = vtk.vtkActor()
+    michel_skin.SetMapper(skin_mapper)
+    michel_skin.GetProperty().SetOpacity(0.5)
+    michel_skin.SetBackfaceProperty(michel_skin.MakeProperty())
+    michel_skin.GetBackfaceProperty().SetColor(colors.GetColor3d('LightCoral'))
+    setup_skin_properties(michel_skin)
 
-    michelSkin = vtk.vtkActor()
-    michelSkin.SetMapper(skinMapper)
-    michelSkin.GetProperty().SetOpacity(0.5)
-    michelSkin.SetBackfaceProperty(michelSkin.MakeProperty())
-    michelSkin.GetBackfaceProperty().SetColor(colors.GetColor3d('LightCoral'))
-    michelSkin.GetProperty().SetDiffuse(0.8)
-    michelSkin.GetProperty().SetDiffuseColor(colors.GetColor3d('LightCoral'))
-    michelSkin.GetProperty().SetSpecular(0.1)
-    michelSkin.GetProperty().SetSpecularPower(120.0)
-
-    renderer = vtk.vtkRenderer()
-    renderer.AddActor(michelBone)
-    renderer.AddActor(michelSkin)
-    renderer.SetBackground(colors.GetColor3d('PaleGreen'))
     # TODO add box (Maybe at a global level to avoid duplication)
     return renderer
+
 
 def lower_left(bone_contour, skin_contour):
     sphere = vtk.vtkSphere()
@@ -101,7 +151,6 @@ def lower_left(bone_contour, skin_contour):
     clipper.SetInputConnection(skin_contour.GetOutputPort())
     clipper.SetClipFunction(sphere)
 
-    # TODO ask if must be the same sphere or can use a new one
     sphere_source = vtk.vtkSphereSource()
     sphere_source.SetRadius(50)
     sphere_source.SetCenter(70, 30, 110)
@@ -113,75 +162,67 @@ def lower_left(bone_contour, skin_contour):
     sphere_actor.SetMapper(sphere_mapper)
     sphere_actor.GetProperty().SetOpacity(0.1)
 
-    boneMapper = vtk.vtkPolyDataMapper()
-    boneMapper.SetInputConnection(bone_contour.GetOutputPort())
-    boneMapper.ScalarVisibilityOff()
+    michel_bone = get_bone_actor(bone_contour)
 
     # Skin
-    skinMapper = vtk.vtkPolyDataMapper()
-    skinMapper.SetInputConnection(clipper.GetOutputPort())
-    skinMapper.ScalarVisibilityOff()
+    skin_mapper = vtk.vtkPolyDataMapper()
+    skin_mapper.SetInputConnection(clipper.GetOutputPort())
+    skin_mapper.ScalarVisibilityOff()
 
-    michelBone = vtk.vtkActor()
-    michelBone.SetMapper(boneMapper)
-    michelBone.GetProperty().SetDiffuse(0.8)
-    michelBone.GetProperty().SetDiffuseColor(colors.GetColor3d('Ivory'))
-    michelBone.GetProperty().SetSpecular(0.8)
-    michelBone.GetProperty().SetSpecularPower(120.0)
+    michel_skin = vtk.vtkActor()
+    michel_skin.SetMapper(skin_mapper)
+    setup_skin_properties(michel_skin)
 
-    michelSkin = vtk.vtkActor()
-    michelSkin.SetMapper(skinMapper)
-    michelSkin.GetProperty().SetDiffuse(0.8)
-    michelSkin.GetProperty().SetDiffuseColor(colors.GetColor3d('LightCoral'))
-    michelSkin.GetProperty().SetSpecular(0.1)
-    michelSkin.GetProperty().SetSpecularPower(120.0)
-
-    renderer = vtk.vtkRenderer()
-    renderer.AddActor(michelBone)
-    renderer.AddActor(michelSkin)
-    renderer.AddActor(sphere_actor)
-    renderer.SetBackground(colors.GetColor3d('LightCyan'))
     # TODO add box (Maybe at a global level to avoid duplication)
     return renderer
 
 
 def lower_right(bone_contour, skin_contour):
-    color_table = vtk.vtkColorTransferFunction()
-    color_table.AddRGBPoint(0, 0.52, 0.5, 1)
-    color_table.AddRGBPoint(1, 0.129, 0.643, 0.318)
-    color_table.AddRGBPoint(400, 0.573, 0.765, 0.431)
-    color_table.AddRGBPoint(800, 0.949, 0.864, 0.808)
-    color_table.AddRGBPoint(1600, 1, 1, 1)
+    bone_reader, range = get_distance_filter(bone_contour, skin_contour)
+    distance = bone_reader.GetOutputPort(0)
 
-    distanceFilter = vtk.vtkDistancePolyDataFilter()
-    distanceFilter.SetInputConnection(0, bone_contour.GetOutputPort())
-    distanceFilter.SetInputConnection(1, skin_contour.GetOutputPort())
-    distanceFilter.Update()
+    exclusion = vtk.vtkDoubleArray()
+    exclusion.SetNumberOfComponents(2)
+    exclusion.SetNumberOfTuples(1)
+    exclusion.FillComponent(0, 2.4)
+    exclusion.FillComponent(1, float("inf"))
 
-    test = vtk.vtkPolyDataMapper()
-    test.SetInputConnection(distanceFilter.GetOutputPort())
-    test.SetScalarRange(distanceFilter.GetOutput().GetPointData().GetScalars().GetRange()[0],distanceFilter.GetOutput().GetPointData().GetScalars().GetRange()[1])
+    selection_params = vtk.vtkSelectionNode()
+    selection_params.SetContentType(selection_params.THRESHOLDS)
+    selection_params.SetFieldType(selection_params.CELL)
+    selection_params.SetSelectionList(exclusion)
 
+    selector = vtk.vtkSelection()
+    selector.SetNode("cells", selection_params)
 
-    boneMapper = vtk.vtkPolyDataMapper()
-    boneMapper.SetInputConnection(bone_contour.GetOutputPort())
-    boneMapper.ScalarVisibilityOff()
-    boneMapper.SetLookupTable(color_table)
+    selection = vtk.vtkExtractSelection()
+    selection.SetInputConnection(0, distance)
+    selection.SetInputData(1, selector)
 
-    michelBone = vtk.vtkActor()
-    michelBone.SetMapper(test)
-    michelBone.GetProperty().SetDiffuse(0.8)
-    #michelBone.GetProperty().SetDiffuseColor(colors.GetColor3d('Ivory'))
-    michelBone.GetProperty().SetSpecular(0.8)
-    michelBone.GetProperty().SetSpecularPower(120.0)
+    #Getting polydata back
+    converter = vtk.vtkGeometryFilter()
+    converter.SetInputConnection(selection.GetOutputPort())
+    converter.Update()
 
-    renderer = vtk.vtkRenderer()
-    renderer.AddActor(michelBone)
-    renderer.SetBackground(colors.GetColor3d('Gainsboro'))
+    distance_mapper = vtk.vtkPolyDataMapper()
+    distance_mapper.SetInputConnection(converter.GetOutputPort())
+    distance_mapper.SetScalarRange(
+        range[0],
+        range[1],
+    )
+
+    michel_bone = vtk.vtkActor()
+    michel_bone.SetMapper(distance_mapper)
+    michel_bone.GetProperty().SetDiffuse(0.8)
+    michel_bone.GetProperty().SetSpecular(0.8)
+    michel_bone.GetProperty().SetSpecularPower(120.0)
+
+    return create_renderer([michel_bone], colors.GetColor3d('Gainsboro'))
+
 
 # https://kitware.github.io/vtk-examples/site/Python/IO/ReadSLC/
 reader = vtk.vtkSLCReader()
-reader.SetFileName(input_file)
+reader.SetFileName(INPUT_FILE)
 reader.Update()
 
 colors = vtk.vtkNamedColors()
@@ -192,41 +233,41 @@ boneContourFilter = get_body_part_contour(reader, 72)
 # Skin
 skinContourFilter = get_body_part_contour(reader, 50)
 
-# distanceFilter = vtk.vtkDistancePolyDataFilter()
-# distanceFilter.SetInputConnection(0, boneContourFilter)
-# distanceFilter.SetInputConnection(1, skinContourFilter)
-# distanceFilter.Update()
-# distanceFilter.SignedDistanceOff()
-#
-# distance = vtk.vtkFloatArray()
-# distance.SetNumberOfComponents(2)
-# distance.SetNumberOfTuples(1)
-# distance.FillComponent(0, 5)
-# distance.FillComponent(1, float("inf"))
+renderer1 = upper_left(boneContourFilter, skinContourFilter)
+renderer2 = upper_right(boneContourFilter, skinContourFilter)
+renderer3 = lower_left(boneContourFilter, skinContourFilter)
+renderer4 = lower_right(boneContourFilter, skinContourFilter)
 
-
+renderer1.SetViewport([0.0, 0.5, 0.5, 1.0])
+renderer2.SetViewport([0.5, 0.5, 1.0, 1.0])
+renderer3.SetViewport([0.0, 0.0, 0.5, 0.5])
+renderer4.SetViewport([0.5, 0.0, 1.0, 0.5])
 # Create a rendering window and renderer.
-renderer = lower_right(boneContourFilter, skinContourFilter)
 renderWindow = vtk.vtkRenderWindow()
-renderWindow.AddRenderer(renderer)
-renderWindow.SetSize(500, 500)
+renderWindow.AddRenderer(renderer1)
+renderWindow.AddRenderer(renderer2)
+renderWindow.AddRenderer(renderer3)
+renderWindow.AddRenderer(renderer4)
+renderWindow.SetSize(800, 800)
 
 # Create a renderwindowinteractor.
 renderWindowInteractor = vtk.vtkRenderWindowInteractor()
 renderWindowInteractor.SetRenderWindow(renderWindow)
 
 # Pick a good view
-cam1 = renderer.GetActiveCamera()
-cam1.SetFocalPoint(0.0, 0.0, 0.0)
+cam1 = renderer1.GetActiveCamera()
 cam1.SetPosition(0.0, -1.0, 0.0)
 cam1.SetViewUp(0.0, 0.0, -1.0)
-cam1.Azimuth(-90.0)
-renderer.ResetCamera()
-renderer.ResetCameraClippingRange()
+renderer1.ResetCamera()
+renderer1.ResetCameraClippingRange()
 
-renderWindow.SetWindowName('ReadSLC')
-renderWindow.SetSize(640, 512)
-renderWindow.Render()
+renderer2.SetActiveCamera(cam1)
+renderer3.SetActiveCamera(cam1)
+renderer4.SetActiveCamera(cam1)
+
+# renderWindow.SetWindowName('ReadSLC')
+# renderWindow.SetSize(640, 512)
+# renderWindow.Render()
 
 # Enable user interface interactor.
 renderWindowInteractor.Initialize()
