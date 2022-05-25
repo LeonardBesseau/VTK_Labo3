@@ -18,7 +18,22 @@ def create_renderer(actors, color):
     for actor in actors:
         renderer.AddActor(actor)
     renderer.SetBackground(color)
-    # TODO add box (Maybe at a global level to avoid duplication)
+
+    # Add box
+    box_data = vtk.vtkCubeSource()
+    box_data.SetBounds(0, 150, 0, 170, 0, 200)
+
+    box_edges = vtk.vtkFeatureEdges()
+    box_edges.SetInputConnection(box_data.GetOutputPort())
+
+    box_mapper = vtk.vtkDataSetMapper()
+    box_mapper.SetInputConnection(box_edges.GetOutputPort())
+
+    box_actor = vtk.vtkActor()
+    box_actor.SetMapper(box_mapper)
+    box_actor.GetProperty().SetRepresentationToWireframe()
+
+    renderer.AddActor(box_actor)
     return renderer
 
 
@@ -26,7 +41,6 @@ def get_bone_actor(bone_contour):
     bone_mapper = vtk.vtkPolyDataMapper()
     bone_mapper.SetInputConnection(bone_contour.GetOutputPort())
     bone_mapper.ScalarVisibilityOff()
-
 
     bone_actor = vtk.vtkActor()
     bone_actor.SetMapper(bone_mapper)
@@ -206,7 +220,7 @@ def lower_left(bone_contour, skin_contour):
 
 
 def lower_right(bone_contour, skin_contour):
-    bone_data, range  = get_bone_data_filtered(bone_contour, skin_contour)
+    bone_data, range = get_bone_data_filtered(bone_contour, skin_contour)
     distance_mapper = vtk.vtkPolyDataMapper()
     distance_mapper.SetInputConnection(bone_data.GetOutputPort())
     distance_mapper.SetScalarRange(
