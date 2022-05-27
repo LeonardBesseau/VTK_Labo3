@@ -247,9 +247,8 @@ colors = vtk.vtkNamedColors()
 box_outline = vtk.vtkOutlineFilter()
 box_outline.SetInputConnection(reader.GetOutputPort())
 
-box_mapper= vtk.vtkPolyDataMapper()
+box_mapper = vtk.vtkPolyDataMapper()
 box_mapper.SetInputConnection(box_outline.GetOutputPort())
-
 
 # Bone
 boneContourFilter = get_body_part_contour(reader, 72)
@@ -278,7 +277,6 @@ renderWindow.SetSize(800, 800)
 renderWindowInteractor = vtk.vtkRenderWindowInteractor()
 renderWindowInteractor.SetRenderWindow(renderWindow)
 
-# Pick a good view
 cam1 = renderer1.GetActiveCamera()
 cam1.SetPosition(0.0, -1.0, 0.0)
 cam1.SetViewUp(0.0, 0.0, -1.0)
