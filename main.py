@@ -244,6 +244,13 @@ reader.Update()
 
 colors = vtk.vtkNamedColors()
 
+box_outline = vtk.vtkOutlineFilter()
+box_outline.SetInputConnection(reader.GetOutputPort())
+
+box_mapper= vtk.vtkPolyDataMapper()
+box_mapper.SetInputConnection(box_outline.GetOutputPort())
+
+
 # Bone
 boneContourFilter = get_body_part_contour(reader, 72)
 
