@@ -1,6 +1,9 @@
 import os.path
 import vtkmodules.all as vtk
 
+SKIN_COUNTOUR_VALUE = 50
+BONE_COUNTOUR_VALUE = 72
+
 INPUT_FILE = "files/vw_knee.slc"
 BONE_FILE = "spooky_skeleton.vtk"
 BONE_FILE_RANGE = "spooky_skeleton.range"
@@ -251,10 +254,10 @@ box_mapper = vtk.vtkPolyDataMapper()
 box_mapper.SetInputConnection(box_outline.GetOutputPort())
 
 # Bone
-boneContourFilter = get_body_part_contour(reader, 72)
+boneContourFilter = get_body_part_contour(reader, BONE_COUNTOUR_VALUE)
 
 # Skin
-skinContourFilter = get_body_part_contour(reader, 50)
+skinContourFilter = get_body_part_contour(reader, SKIN_COUNTOUR_VALUE)
 
 renderer1 = upper_left(boneContourFilter, skinContourFilter)
 renderer2 = upper_right(boneContourFilter, skinContourFilter)
