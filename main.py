@@ -26,15 +26,15 @@ def create_renderer(actors, color):
     box_data = vtk.vtkCubeSource()
     box_data.SetBounds(0, 150, 0, 170, 0, 200)
 
-    box_edges = vtk.vtkFeatureEdges()
-    box_edges.SetInputConnection(box_data.GetOutputPort())
+    box_outline = vtk.vtkOutlineFilter()
+    box_outline.SetInputConnection(reader.GetOutputPort())
 
-    box_mapper = vtk.vtkDataSetMapper()
-    box_mapper.SetInputConnection(box_edges.GetOutputPort())
+    box_mapper = vtk.vtkPolyDataMapper()
+    box_mapper.SetInputConnection(box_outline.GetOutputPort())
 
     box_actor = vtk.vtkActor()
     box_actor.SetMapper(box_mapper)
-    box_actor.GetProperty().SetRepresentationToWireframe()
+    box_actor.GetProperty().SetColor(colors.GetColor3d('black'))
 
     renderer.AddActor(box_actor)
     return renderer
@@ -247,11 +247,7 @@ reader.Update()
 
 colors = vtk.vtkNamedColors()
 
-box_outline = vtk.vtkOutlineFilter()
-box_outline.SetInputConnection(reader.GetOutputPort())
 
-box_mapper = vtk.vtkPolyDataMapper()
-box_mapper.SetInputConnection(box_outline.GetOutputPort())
 
 # Bone
 boneContourFilter = get_body_part_contour(reader, BONE_COUNTOUR_VALUE)
